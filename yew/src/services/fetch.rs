@@ -6,6 +6,7 @@ cfg_if::cfg_if! {
         pub use std_web::*;
     } else if #[cfg(feature = "web_sys")] {
         mod web_sys;
+        mod web_sys_stream;
         pub use self::web_sys::*;
     }
 }
