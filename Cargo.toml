@@ -49,6 +49,7 @@ members = [
   "examples/node_refs",
   "examples/npm_and_rest",
   "examples/pub_sub",
+  "examples/readable_stream",
   "examples/textarea",
   "examples/timer",
   "examples/todomvc",

@@ -8,6 +8,7 @@ cfg_if::cfg_if! {
         mod web_sys;
         mod web_sys_stream;
         pub use self::web_sys::*;
+        pub use self::web_sys_stream::*;
     }
 }
 
