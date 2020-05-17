@@ -2,7 +2,15 @@
 
 /// Raw JS bindings to ReadableStream
 pub mod sys;
+/// Stream implementation of ReadableStreamDefaultReader
+pub mod stream_impl;
+
 use wasm_bindgen::prelude::*;
+use futures::ready;
+use futures::stream::Stream;
+use futures::task::{Context, Poll};
+use std::future::Future;
+use std::pin::Pin;
 use wasm_bindgen_futures::JsFuture;
 use std::future::Future;
 
