@@ -15,7 +15,7 @@ use thiserror::Error as ThisError;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-use super::web_sys_stream::{readable_stream, readable_stream_default_reader};
+// use super::web_sys_stream::{readable_stream, readable_stream_default_reader};
 use web_sys::{
     AbortController, Headers, ReferrerPolicy, Request as WebRequest, RequestInit,
     Response as WebResponse,
@@ -360,43 +360,43 @@ impl FetchService {
     //     request: Request
     //     )
 }
-
-/// A Readable stream
-#[derive(Debug)]
-pub struct ReadableStream {
-    raw_stream: readable_stream::ReadableStream,
-    raw_reader: readable_stream_default_reader::ReadableStreamDefaultReader,
-}
-
-impl ReadableStream {
-    fn new(response: &WebResponse) -> Result<Self, FetchError> {
-        let body = Object::get_own_property_descriptor(
-            response,
-            &JsValue::from_str("body")
-        );
-
-        let raw_stream = body.unchecked_into::<readable_stream::ReadableStream>();
-        let raw_reader = raw_stream.get_reader()
-            .map_err(|err| err.unchecked_into::<js_sys::Error>())
-            .map_err(|err| FetchError::FetchFailed(err.to_string().as_string().unwrap()))?;
-
-        Ok(Self {
-            raw_stream,
-            raw_reader,
-        })
-    }
-}
+// 
+// /// A Readable stream
+// #[derive(Debug)]
+// pub struct ReadableStream {
+//     raw_stream: readable_stream::ReadableStream,
+//     raw_reader: readable_stream_default_reader::ReadableStreamDefaultReader,
+// }
+// 
+// impl ReadableStream {
+//     fn new(response: &WebResponse) -> Result<Self, FetchError> {
+//         let body = Object::get_own_property_descriptor(
+//             response,
+//             &JsValue::from_str("body")
+//         );
+// 
+//         let raw_stream = body.unchecked_into::<readable_stream::ReadableStream>();
+//         let raw_reader = raw_stream.get_reader()
+//             .map_err(|err| err.unchecked_into::<js_sys::Error>())
+//             .map_err(|err| FetchError::FetchFailed(err.to_string().as_string().unwrap()))?;
+// 
+//         Ok(Self {
+//             raw_stream,
+//             raw_reader,
+//         })
+//     }
+// }
 
 // impl futures::stream::Stream {
 //      
 // }
 // 
-impl Drop for ReadableStream {
-    fn drop(&mut self) {
-        let _ = self.raw_reader.cancel_with_reason(JsValue::from_str("Stream dropped"));
-        let _ = self.raw_stream.cancel_with_reason(JsValue::from_str("Stream dropped"));
-    }
-}
+// impl Drop for ReadableStream {
+//     fn drop(&mut self) {
+//         let _ = self.raw_reader.cancel_with_reason(JsValue::from_str("Stream dropped"));
+//         let _ = self.raw_stream.cancel_with_reason(JsValue::from_str("Stream dropped"));
+//     }
+// }
 
 fn fetch_impl<IN, OUT: 'static, DATA: 'static>(
     fetching_type: FetchingType,
