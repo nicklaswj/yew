@@ -2,31 +2,27 @@
 
 /// Raw JS bindings to ReadableStream
 pub mod sys;
-
-use futures::ready;
-use futures::stream::Stream;
-use futures::task::{Context, Poll};
-use std::future::Future;
-use std::pin::Pin;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use std::convert::From;
 
 #[derive(Debug)]
 /// ReadableStream
 pub struct ReadableStream {
+    /// Represents the raw object which is provided by bindgen
     inner: sys::ReadableStream,
 }
 
 #[derive(Debug)]
 /// ReadableStreamDefaultReader
 pub struct ReadableStreamDefaultReader {
+    /// Represents the raw object which is provided by bindgen
     inner: sys::ReadableStreamDefaultReader,
 }
 
 #[derive(Debug)]
 /// ReadableStreamDefaultReaderValue
 pub struct ReadableStreamDefaultReaderValue {
+    /// Represents the raw object which is provided by bindgen
     inner: sys::ReadableStreamDefaultReaderValue,
 }
 
@@ -49,8 +45,38 @@ impl From<sys::ReadableStreamDefaultReaderValue> for ReadableStreamDefaultReader
 }
 
 impl ReadableStream {
+    /// This function returns whether or not the readable stream is locked to a reader.
+    pub fn locked(&self) -> bool {
+        self.inner.locked()
+    }
 
+    /// Can be called either with or without a reason (just like the javascript version)
+    pub fn cancel(&self, reason: Option<&str>) -> Result<JsFuture, js_sys::Error> {
+        if let Some(curr_reason) = reason {
+            self.inner
+                .cancel_with_reason(JsValue::from(curr_reason))
+                .map(JsFuture::from)
+                .map_err(js_sys::Error::from)
+        } else {
+            self.inner
+                .cancel()
+                .map(JsFuture::from)
+                .map_err(js_sys::Error::from)
+        }
+    }
+
+    /// Used to obtain a reader
+    pub fn get_reader(&self) -> Result<ReadableStreamDefaultReader, js_sys::Error> {
+        self.inner
+            .get_reader()
+            .map(ReadableStreamDefaultReader::from) //map the reader from sys to the one defined above
+            .map_err(js_sys::Error::from)
+    }
 }
+
+impl ReadableStreamDefaultReader {}
+
+impl ReadableStreamDefaultReaderValue {}
 
 //struct YewStream {
 //    inner: Option<ReadableStreamDefaultReader>,

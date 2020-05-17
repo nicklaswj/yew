@@ -1,5 +1,7 @@
-use wasm_bindgen::prelude::*;
+//! This module contains the raw bindings to the JavaScript API.
+
 use js_sys::Promise;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
@@ -10,10 +12,10 @@ extern "C" {
     pub fn locked(this: &ReadableStream) -> bool;
 
     #[wasm_bindgen(method, catch)]
-    pub fn cancel(this: &ReadableStream) -> Result<JsValue, JsValue>;
+    pub fn cancel(this: &ReadableStream) -> Result<Promise, JsValue>;
 
-    #[wasm_bindgen(method, catch)]
-    pub fn cancel_with_reason(this: &ReadableStream, reason: JsValue) -> Result<JsValue, JsValue>;
+    #[wasm_bindgen(method, catch, js_name = cancel)]
+    pub fn cancel_with_reason(this: &ReadableStream, reason: JsValue) -> Result<Promise, JsValue>;
 
     #[wasm_bindgen(method, catch, js_name = getReader)]
     pub fn get_reader(this: &ReadableStream) -> Result<ReadableStreamDefaultReader, JsValue>;
@@ -29,7 +31,7 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> ReadableStreamDefaultReader;
-    
+
     #[wasm_bindgen(method, getter)]
     pub fn closed(this: &ReadableStreamDefaultReader) -> Promise;
 
@@ -37,7 +39,10 @@ extern "C" {
     pub fn cancel(this: &ReadableStreamDefaultReader) -> Result<Promise, JsValue>;
 
     #[wasm_bindgen(method, catch, js_name = cancel)]
-    pub fn cancel_with_reason(this: &ReadableStreamDefaultReader, reason: JsValue) -> Result<Promise, JsValue>;
+    pub fn cancel_with_reason(
+        this: &ReadableStreamDefaultReader,
+        reason: JsValue,
+    ) -> Result<Promise, JsValue>;
 
     #[wasm_bindgen(method, catch)]
     pub fn read(this: &ReadableStreamDefaultReader) -> Result<Promise, JsValue>;
