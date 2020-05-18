@@ -89,6 +89,27 @@ impl ReadableStreamDefaultReader {
         }
     }
 
+    /// Can be called either with or without a reason (just like the javascript version)
+    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Result<JsValue, JsValue>>, js_sys::Error> {
+
+        let promise: JsFuture = if let Some(curr_reason) = reason {
+            self.inner
+                .cancel_with_reason(JsValue::from(curr_reason))
+                .map(JsFuture::from)
+                .map_err(js_sys::Error::from)?
+        } else {
+            self.inner
+                .cancel()
+                .map(JsFuture::from)
+                .map_err(js_sys::Error::from)?
+        };
+
+        Ok(async {
+            let result: Result<JsValue, JsValue> = promise.await;
+            result
+        })
+    }
+
     /// Resolves once a stream closes
     pub fn closed(&self) -> impl Future<Output = Result<(), ()>> {
         let future: JsFuture = JsFuture::from(self.inner.closed());
@@ -99,6 +120,28 @@ impl ReadableStreamDefaultReader {
                 .map_err(|_| ());
             res
         }
+    }
+    
+    /// To read a value from the stream
+    pub fn read(&self) -> Result<impl Future<Output = Result<ReadableStreamDefaultReaderValue, JsValue>>, js_sys::Error> {
+
+        let promise: JsFuture = self.inner
+            .read()
+            .map(JsFuture::from)
+            .map_err(js_sys::Error::from)?;
+
+        Ok(async {
+            let result: Result<JsValue, JsValue> = promise.await;
+            result
+                .map(ReadableStreamDefaultReaderValue::from)
+        })
+    }
+
+    /// To release the lock on the reader
+    pub fn release_lock(&self) -> Result<(), js_sys::Error> {
+        self.inner
+            .release_lock()
+            .map_err(js_sys::Error::from)
     }
 }
 
@@ -113,6 +156,13 @@ impl ReadableStreamDefaultReaderValue {
     }
 }
 
+impl From<JsValue> for ReadableStreamDefaultReaderValue {
+    fn from(value: JsValue) -> Self {
+        Self {
+            inner: wasm_bindgen::JsCast::unchecked_from_js(value)
+        }
+    }
+}
 //struct YewStream {
 //    inner: Option<ReadableStreamDefaultReader>,
 //    next_val: Option<Pin<Box<dyn Future<Item = Result<JsValue, JsValue>>>>>,
