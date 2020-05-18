@@ -4,6 +4,7 @@
 pub mod sys;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
+use std::future::Future;
 
 #[derive(Debug)]
 /// ReadableStream
@@ -51,18 +52,24 @@ impl ReadableStream {
     }
 
     /// Can be called either with or without a reason (just like the javascript version)
-    pub fn cancel(&self, reason: Option<&str>) -> Result<JsFuture, js_sys::Error> {
-        if let Some(curr_reason) = reason {
+    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Result<JsValue, JsValue>>, js_sys::Error> {
+
+        let promise: JsFuture = if let Some(curr_reason) = reason {
             self.inner
                 .cancel_with_reason(JsValue::from(curr_reason))
                 .map(JsFuture::from)
-                .map_err(js_sys::Error::from)
+                .map_err(js_sys::Error::from)?
         } else {
             self.inner
                 .cancel()
                 .map(JsFuture::from)
-                .map_err(js_sys::Error::from)
-        }
+                .map_err(js_sys::Error::from)?
+        };
+
+        Ok(async {
+            let result: Result<JsValue, JsValue> = promise.await;
+            result
+        })
     }
 
     /// Used to obtain a reader
@@ -74,9 +81,37 @@ impl ReadableStream {
     }
 }
 
-impl ReadableStreamDefaultReader {}
+impl ReadableStreamDefaultReader {
+    /// Creates a new ReadableStreamDefaultReader
+    pub fn new() -> Self {
+        Self {
+            inner: sys::ReadableStreamDefaultReader::new(),
+        }
+    }
 
-impl ReadableStreamDefaultReaderValue {}
+    /// Resolves once a stream closes
+    pub fn closed(&self) -> impl Future<Output = Result<(), ()>> {
+        let future: JsFuture = JsFuture::from(self.inner.closed());
+        async {
+            let res:Result<(), ()> = future
+                .await
+                .map(|_| ())
+                .map_err(|_| ());
+            res
+        }
+    }
+}
+
+impl ReadableStreamDefaultReaderValue {
+    /// Represents the anonymous object returned by read
+    pub fn value(&self) -> JsValue {
+        self.inner.value()
+    }
+    /// Whether the stream is done
+    pub fn done(&self) -> bool {
+        self.inner.done()
+    }
+}
 
 //struct YewStream {
 //    inner: Option<ReadableStreamDefaultReader>,
