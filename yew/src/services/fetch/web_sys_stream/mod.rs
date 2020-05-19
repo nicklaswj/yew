@@ -9,7 +9,6 @@ use wasm_bindgen::prelude::*;
 use futures::ready;
 use futures::stream::Stream;
 use futures::task::{Context, Poll};
-use std::future::Future;
 use std::pin::Pin;
 use wasm_bindgen_futures::JsFuture;
 use std::future::Future;
@@ -140,7 +139,7 @@ impl ReadableStreamDefaultReader {
     }
     
     /// To read a value from the stream
-    pub fn read(&self) -> Result<impl Future<Output = Result<ReadableStreamDefaultReaderValue, JsValue>>, js_sys::Error> {
+    pub fn read(&self) -> Result<impl Future<Output = Result<ReadableStreamDefaultReaderValue, js_sys::Error>>, js_sys::Error> {
 
         let promise: JsFuture = self.inner
             .read()
@@ -151,6 +150,7 @@ impl ReadableStreamDefaultReader {
             let result: Result<JsValue, JsValue> = promise.await;
             result
                 .map(ReadableStreamDefaultReaderValue::from)
+                .map_err(js_sys::Error::from)
         })
     }
 
@@ -164,8 +164,13 @@ impl ReadableStreamDefaultReader {
 
 impl ReadableStreamDefaultReaderValue {
     /// Represents the anonymous object returned by read
-    pub fn value(&self) -> JsValue {
-        self.inner.value()
+    pub fn value(&self) -> Option<js_sys::Uint8ClampedArray> {
+        let value = self.inner.value();
+        if value.is_undefined() {
+            None
+        } else {
+            Some(js_sys::Uint8ClampedArray::from(self.inner.value()))
+        }
     }
     /// Whether the stream is done
     pub fn done(&self) -> bool {

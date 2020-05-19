@@ -29,7 +29,7 @@ pub struct IntoStream (Option<StreamState>);
 
 impl From<ReadableStreamDefaultReader> for IntoStream {
     fn from(reader: ReadableStreamDefaultReader) -> Self {
-        Self(reader)
+        Self(Some(StreamState::ReadyPoll(reader)))
     }
 }
 
@@ -37,44 +37,40 @@ impl Stream for IntoStream {
     type Item = Result<Vec<u8>, js_sys::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let into_stream: &mut Option<StreamState> = &mut self.get_mut().0;
         loop {
-            match self.get_mut().0.take() {
+            match into_stream.take() {
                 Some(StreamState::ReadyPoll(stream)) => {
-                    // TODO call stream.read() here instead this fake future
-                    let future_value = async {
-                        Err::<ReadableStreamDefaultReaderValue, js_sys::Error>(
-                            js_sys::Error::new("Not implemented")
-                        )
-                    };
+                    let future_value = stream.read();
 
                     let stream_future = Box::pin(async move {
-                        let value = future_value.await?;
+                        let value = future_value?.await?;
 
                         if value.done() {
                             Ok(None)
                         } else {
-                            Ok(value.value())
+                            Ok(value.value().map(|array| array.to_vec()))
                         }
                     });
 
-                    self.get_mut().0 = Some(StreamState::Pending(stream, stream_future));
+                    *into_stream = Some(StreamState::Pending(stream, stream_future));
                 }
-                Some(StreamState::Pending(stream, future_value)) => {
+                Some(StreamState::Pending(stream, mut future_value)) => {
                     return match future_value.as_mut().poll(cx) {
                         Poll::Ready(Ok(None)) => {
-                            self.get_mut().0 = None;
+                            *into_stream = None;
                             Poll::Ready(None)
                         }
                         Poll::Ready(Ok(Some(data))) => {
-                            self.get_mut().0 = Some(StreamState::ReadyPoll(stream));
+                            *into_stream = Some(StreamState::ReadyPoll(stream));
                             Poll::Ready(Some(Ok(data)))
                         }
                         Poll::Ready(Err(err)) => {
-                            self.get_mut().0 = Some(StreamState::ReadyPoll(stream));
+                            *into_stream = Some(StreamState::ReadyPoll(stream));
                             Poll::Ready(Some(Err(err)))
                         }
                         Poll::Pending => {
-                            self.get_mut().0 = Some(StreamState::ReadyPoll(stream));
+                            *into_stream = Some(StreamState::Pending(stream, future_value));
                             Poll::Pending
                         }
                     }
