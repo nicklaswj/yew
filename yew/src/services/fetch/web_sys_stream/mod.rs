@@ -90,23 +90,32 @@ impl ReadableStreamDefaultReader {
     }
 
     /// Can be called either with or without a reason (just like the javascript version)
-    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Result<JsValue, JsValue>>, js_sys::Error> {
+    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Option<String>>, js_sys::Error> {
 
-        let promise: JsFuture = if let Some(curr_reason) = reason {
-            self.inner
+        let (promise, has_reason) = if let Some(curr_reason) = reason {
+            (self.inner
                 .cancel_with_reason(JsValue::from(curr_reason))
                 .map(JsFuture::from)
-                .map_err(js_sys::Error::from)?
+                .map_err(js_sys::Error::from)?, true)
+
         } else {
-            self.inner
+            (self.inner
                 .cancel()
                 .map(JsFuture::from)
-                .map_err(js_sys::Error::from)?
+                .map_err(js_sys::Error::from)?, false)
         };
 
-        Ok(async {
-            let result: Result<JsValue, JsValue> = promise.await;
-            result
+        Ok(async move {
+            if has_reason {
+                promise.await
+                    .map(|value| Some(value.as_string().unwrap()))
+                    .unwrap()
+            }
+            else {
+                promise.await
+                    .map(|_| None)
+                    .unwrap()
+            }
         })
     }
 
