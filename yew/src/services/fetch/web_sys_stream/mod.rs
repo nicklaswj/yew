@@ -3,7 +3,7 @@
 /// Raw JS bindings to ReadableStream
 pub mod sys;
 /// Stream implementation of ReadableStreamDefaultReader
-pub mod stream_impl;
+pub mod yew_stream;
 
 use wasm_bindgen::prelude::*;
 use futures::ready;
