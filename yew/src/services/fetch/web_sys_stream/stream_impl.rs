@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::fmt;
 use std::convert::From;
 
-/// Internal state of the IntoStream stream
+/// Internal state of the YewStream stream
 enum StreamState {
     ReadyPoll(ReadableStreamDefaultReader),
     Pending(ReadableStreamDefaultReader, Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>, js_sys::Error>>>>),
@@ -25,15 +25,15 @@ impl fmt::Debug for StreamState {
 
 /// Implements futures::stream::Stream for ReadableStreamDefaultReader
 #[derive(Debug)]
-pub struct IntoStream (Option<StreamState>);
+pub struct YewStream (Option<StreamState>);
 
-impl From<ReadableStreamDefaultReader> for IntoStream {
+impl From<ReadableStreamDefaultReader> for YewStream {
     fn from(reader: ReadableStreamDefaultReader) -> Self {
         Self(Some(StreamState::ReadyPoll(reader)))
     }
 }
 
-impl Stream for IntoStream {
+impl Stream for YewStream {
     type Item = Result<Vec<u8>, js_sys::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
