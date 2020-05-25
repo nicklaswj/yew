@@ -80,3 +80,18 @@ impl Stream for YewStream {
         }
     }
 }
+
+impl Drop for YewStream {
+    fn drop(&mut self) {
+        if let Some(state) = self.0 {
+            let stream = match &state {
+                StreamState::ReadyPoll(stream) => stream,
+                StreamState::Pending(stream, _) => stream 
+            };
+
+            stream.release_lock().unwrap();
+        }
+    }
+}
+
+
