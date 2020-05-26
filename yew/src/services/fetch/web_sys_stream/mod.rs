@@ -86,6 +86,11 @@ impl ReadableStream {
             .map(ReadableStreamDefaultReader::from) //map the reader from sys to the one defined above
             .map_err(js_sys::Error::from)
     }
+
+    /// Consumes self and return the raw bindings for ReadableStream
+    pub fn into_inner(self) -> sys::ReadableStream {
+        self.inner
+    }
 }
 
 impl ReadableStreamDefaultReader {

@@ -15,7 +15,9 @@ use thiserror::Error as ThisError;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-// use super::web_sys_stream::{readable_stream, readable_stream_default_reader};
+use super::yew_stream::YewStream;
+use std::convert::TryFrom;
+
 use web_sys::{
     AbortController, Headers, ReferrerPolicy, Request as WebRequest, RequestInit,
     Response as WebResponse,
@@ -52,6 +54,17 @@ impl JsInterop for String {
 
     fn to_js(self) -> JsValue {
         self.into()
+    }
+}
+
+impl<OUT> JsInterop for YewStream<OUT> {
+    fn from_js(js_value: JsValue) -> Result<Self, FetchError> {
+        YewStream::try_from(js_value)
+            .map_err(FetchError::Other)
+    }
+
+    fn to_js(self) -> JsValue {
+        self.into_js()
     }
 }
 
@@ -140,6 +153,8 @@ enum FetchError {
     InvalidResponse,
     #[error("unexpected error, please report")]
     InternalError,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 #[derive(Debug)]
@@ -353,50 +368,7 @@ impl FetchService {
     {
         fetch_impl::<IN, OUT, Vec<u8>>(FetchingType::Binary, request, Some(options), callback)
     }
-
-    // /// Fetch the data as a stream of bytes
-    // pub fn fetch_stream<IN, OUT: 'static>(
-    //     &mut self,
-    //     request: Request
-    //     )
 }
-// 
-// /// A Readable stream
-// #[derive(Debug)]
-// pub struct ReadableStream {
-//     raw_stream: readable_stream::ReadableStream,
-//     raw_reader: readable_stream_default_reader::ReadableStreamDefaultReader,
-// }
-// 
-// impl ReadableStream {
-//     fn new(response: &WebResponse) -> Result<Self, FetchError> {
-//         let body = Object::get_own_property_descriptor(
-//             response,
-//             &JsValue::from_str("body")
-//         );
-// 
-//         let raw_stream = body.unchecked_into::<readable_stream::ReadableStream>();
-//         let raw_reader = raw_stream.get_reader()
-//             .map_err(|err| err.unchecked_into::<js_sys::Error>())
-//             .map_err(|err| FetchError::FetchFailed(err.to_string().as_string().unwrap()))?;
-// 
-//         Ok(Self {
-//             raw_stream,
-//             raw_reader,
-//         })
-//     }
-// }
-
-// impl futures::stream::Stream {
-//      
-// }
-// 
-// impl Drop for ReadableStream {
-//     fn drop(&mut self) {
-//         let _ = self.raw_reader.cancel_with_reason(JsValue::from_str("Stream dropped"));
-//         let _ = self.raw_stream.cancel_with_reason(JsValue::from_str("Stream dropped"));
-//     }
-// }
 
 fn fetch_impl<IN, OUT: 'static, DATA: 'static>(
     fetching_type: FetchingType,
@@ -519,14 +491,38 @@ where
         }
     }
 
-    async fn get_data(&self, response: &WebResponse) -> Result<DATA, FetchError> {
-        let data_promise = match self.fetching_type {
-            FetchingType::Binary => response.array_buffer(),
-            FetchingType::Text => response.text(),
-            FetchingType::Stream => unimplemented!(),
-        }.map_err(|_| FetchError::InvalidResponse)?;
+//    async fn get_data(&self, response: &WebResponse) -> Result<DATA, FetchError> {
+//        let data_promise = match self.fetching_type {
+//            FetchingType::Binary => response.array_buffer(),
+//            FetchingType::Text => response.text(),
+//            FetchingType::Stream => super::yew_stream::YewStream::new_from_response(response),
+//        }.map_err(|_| FetchError::InvalidResponse)?;
+//
+//        let data_result = JsFuture::from(data_promise).await;
+//        if *self.active.borrow() {
+//            data_result
+//                .map_err(|_| FetchError::InvalidResponse)
+//                .and_then(DATA::from_js)
+//        } else {
+//            Err(FetchError::Canceled)
+//        }
+//    }
 
-        let data_result = JsFuture::from(data_promise).await;
+    async fn get_data(&self, response: &WebResponse) -> Result<DATA, FetchError> {
+        let data_result = match self.fetching_type {
+            FetchingType::Binary => JsFuture::from(
+                response.array_buffer()
+                    .map_err(|_| FetchError::InvalidResponse)?).await,
+            FetchingType::Text => JsFuture::from(
+                response.text()
+                    .map_err(|_| FetchError::InvalidResponse)?).await,
+            FetchingType::Stream => {
+                Ok(Object::get_own_property_descriptor(
+                    response,
+                    &JsValue::from_str("body")))
+            }
+        };
+
         if *self.active.borrow() {
             data_result
                 .map_err(|_| FetchError::InvalidResponse)

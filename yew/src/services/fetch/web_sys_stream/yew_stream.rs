@@ -1,9 +1,12 @@
-use super::ReadableStreamDefaultReader;
+use super::{ReadableStream, ReadableStreamDefaultReader, sys};
+use web_sys::Response;
 use std::future::Future;
 use futures::stream::{Stream, StreamExt};
 use futures::task::{Poll, Context};
 use futures::ready;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen::{JsValue, JsCast};
+use js_sys::Object;
 use std::pin::Pin;
 use std::fmt;
 use std::convert::From;
@@ -11,6 +14,7 @@ use std::marker::PhantomData;
 use crate::callback::Callback;
 use crate::format::Binary;
 use anyhow::{anyhow, Error};
+use std::convert::{TryFrom, TryInto};
 
 /// Internal state of the YewStream stream
 enum StreamState {
@@ -30,18 +34,38 @@ impl fmt::Debug for StreamState {
 /// Implements futures::stream::Stream for ReadableStreamDefaultReader
 #[derive(Debug)]
 pub struct YewStream<OUT> {
+    stream: ReadableStream,
     state: Option<StreamState>,
-    _marker: PhantomData<OUT>,
     failed_once: bool,
+    _marker: PhantomData<OUT>,
 }
 
-impl<OUT> From<ReadableStreamDefaultReader> for YewStream<OUT> {
-    fn from(reader: ReadableStreamDefaultReader) -> Self {
-        Self {
+impl<OUT> TryFrom<ReadableStream> for YewStream<OUT> {
+    type Error = Error;
+
+    fn try_from(stream: ReadableStream) -> Result<Self, Error> {
+        let reader = stream.get_reader()
+            .map_err(|e| anyhow!(e.to_string().as_string().unwrap()))?;
+        Ok(Self {
+            stream,
             state: Some(StreamState::ReadyPoll(reader)),
             failed_once: false,
             _marker: PhantomData::default(),
-        }
+        })
+    }
+}
+
+/// From a JS ReadableStream
+impl<OUT> TryFrom<JsValue> for YewStream<OUT>
+{
+    type Error = Error;
+
+    fn try_from(stream: JsValue) -> Result<Self, Error> {
+        let stream: ReadableStream = stream.dyn_into::<sys::ReadableStream>()
+            .map_err(|_| anyhow!("Failed to cast JsValue into sys::ReadableStream"))?
+            .into();
+
+        stream.try_into()
     }
 }
 
@@ -96,18 +120,18 @@ impl<OUT: From<Binary> + Unpin> Stream for YewStream<OUT> {
     }
 }
 
-impl<OUT> Drop for YewStream<OUT> {
-    fn drop(&mut self) {
-        if let Some(state) = &self.state {
-            let stream = match &state {
-                StreamState::ReadyPoll(stream) => stream,
-                StreamState::Pending(stream, _) => stream 
-            };
-
-            stream.release_lock().unwrap();
-        }
-    }
-}
+//impl<OUT> Drop for YewStream<OUT> {
+//    fn drop(&mut self) {
+//        if let Some(state) = &self.state {
+//            let stream = match &state {
+//                StreamState::ReadyPoll(stream) => stream,
+//                StreamState::Pending(stream, _) => stream 
+//            };
+//
+//            stream.release_lock().unwrap();
+//        }
+//    }
+//}
 
 /// Enum that represents a chunk of a stream
 #[derive(Clone, Debug)]
@@ -118,17 +142,12 @@ pub enum StreamChunk<OUT: fmt::Debug> {
     Finished,
 }
 
-/// Trait that is implemented over streams to pass stream chunk over to a callback
-pub trait ConsumeWithCallback<OUT> {
-    /// Consumes the stream and calls the callback for every data chunk
-    fn consume_with_callback(self, callback: Callback<OUT>);
-}
-
-impl<OUT> ConsumeWithCallback<StreamChunk<OUT>> for YewStream<OUT>
+impl<OUT> YewStream<OUT>
 where
     OUT: 'static + From<Binary> + Unpin + fmt::Debug
 {
-    fn consume_with_callback(mut self, callback: Callback<StreamChunk<OUT>>) {
+    /// Consumes the stream and calls the callback for every data chunk
+    pub fn consume_with_callback(mut self, callback: Callback<StreamChunk<OUT>>) {
         let future = async move {
             while let Some(res) = self.next().await {
                 callback.emit(StreamChunk::DataChunk(res));
@@ -142,5 +161,13 @@ where
         };
         
         spawn_local(future)
+    }
+}
+impl<OUT> YewStream<OUT> {
+    /// Consumes self and return the JS ReadableStream
+    pub(crate) fn into_js(self) -> JsValue {
+        let stream = self.stream.into_inner();
+        let js_value: &JsValue = stream.as_ref();
+        js_value.clone()
     }
 }
