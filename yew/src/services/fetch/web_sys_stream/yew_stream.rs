@@ -117,18 +117,18 @@ impl<OUT: From<Binary> + Unpin> Stream for YewStream<OUT> {
     }
 }
 
-//impl<OUT> Drop for YewStream<OUT> {
-//    fn drop(&mut self) {
-//        if let Some(state) = &self.state {
-//            let stream = match &state {
-//                StreamState::ReadyPoll(stream) => stream,
-//                StreamState::Pending(stream, _) => stream 
-//            };
-//
-//            stream.release_lock().unwrap();
-//        }
-//    }
-//}
+impl<OUT> Drop for YewStream<OUT> {
+   fn drop(&mut self) {
+       if let Some(state) = &self.state {
+           let stream = match &state {
+               StreamState::ReadyPoll(stream) => stream,
+               StreamState::Pending(stream, _) => stream 
+           };
+
+           stream.release_lock().unwrap();
+       }
+   }
+}
 
 /// Enum that represents a chunk of a stream
 #[derive(Clone, Debug)]
@@ -158,13 +158,5 @@ where
         };
         
         spawn_local(future)
-    }
-}
-impl<OUT> YewStream<OUT> {
-    /// Consumes self and return the JS ReadableStream
-    pub(crate) fn into_js(self) -> JsValue {
-        let stream = self.stream.into_inner();
-        let js_value: &JsValue = stream.as_ref();
-        js_value.clone()
     }
 }
