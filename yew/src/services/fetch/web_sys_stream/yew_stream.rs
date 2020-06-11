@@ -1,12 +1,9 @@
 use super::{ReadableStream, ReadableStreamDefaultReader, sys};
-use web_sys::Response;
 use std::future::Future;
 use futures::stream::{Stream, StreamExt};
 use futures::task::{Poll, Context};
-use futures::ready;
-use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen::{JsValue, JsCast};
-use js_sys::Object;
 use std::pin::Pin;
 use std::fmt;
 use std::convert::From;

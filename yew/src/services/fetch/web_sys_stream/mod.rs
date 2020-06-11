@@ -6,10 +6,6 @@ pub mod sys;
 pub mod yew_stream;
 
 use wasm_bindgen::prelude::*;
-use futures::ready;
-use futures::stream::Stream;
-use futures::task::{Context, Poll};
-use std::pin::Pin;
 use wasm_bindgen_futures::JsFuture;
 use std::future::Future;
 
