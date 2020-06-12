@@ -133,7 +133,7 @@ fn header_iter(headers: Headers) -> impl Iterator<Item = (String, String)> {
 
 /// Represents errors of a fetch service.
 #[derive(Debug, ThisError)]
-enum FetchError {
+pub(crate) enum FetchError {
     #[error("canceled")]
     Canceled,
     #[error("{0}")]
@@ -420,7 +420,7 @@ where
 
     let active2 = active.clone();
     let format_future = async move {
-        let active = active2;
+        let active = active2.clone();
         let web_response = Fetcher::get_response(
             &active.borrow(),
             fetch_future
@@ -430,7 +430,7 @@ where
             let body = js_sys::Reflect::get(&web_response, &JsValue::from("body"))
                 .map_err(|_| FetchError::FetchFailed("Failed to get body of response".to_owned()))?;
 
-            YewStream::try_from(body)
+            YewStream::try_from((body, active2))
                 .map_err(|e| FetchError::Other(e))
                 .map(|stream| (
                     stream,
@@ -442,9 +442,7 @@ where
         }
     };
 
-    let active2 = active.clone();
     let stream_future = async move {
-        let active = active2;
         let result = format_future.await
                         .map_err(Error::from);
         let (stream, status, headers) = match result {
@@ -453,7 +451,6 @@ where
         };
         
         Fetcher::callback(
-            &mut active.borrow_mut(),
             &callback,
             stream,
             status,
@@ -529,7 +526,7 @@ impl Fetcher {
     // Prepare the response callback.
     // Notice that the callback signature must match the call from the javascript
     // side. There is no static check at this point.
-    fn callback<OUT>(active: &mut bool, callback: &Callback<Response<OUT>>,
+    fn callback<OUT>(callback: &Callback<Response<OUT>>,
         out: OUT, status: u16, headers: Option<Headers>)
     {
         let mut response_builder = Response::builder();
@@ -546,7 +543,6 @@ impl Fetcher {
         let response = response_builder
             .body(out)
             .expect("failed to build response, please report");
-        *active = false;
         callback.emit(response);
     }
 }
@@ -597,8 +593,8 @@ where
     fn callback(&self, data: Result<DATA, Error>, status: u16, headers: Option<Headers>) {
         let out = OUT::from(data);
 
+        *self.active.borrow_mut() = false;
         Fetcher::callback(
-            &mut self.active.borrow_mut(),
             &self.callback,
             out,
             status,

@@ -1,5 +1,7 @@
 use super::{ReadableStream, ReadableStreamDefaultReader, sys};
 use std::future::Future;
+use std::rc::Rc;
+use std::cell::RefCell;
 use futures::stream::{Stream, StreamExt};
 use futures::task::{Poll, Context};
 use wasm_bindgen_futures::spawn_local;
@@ -32,19 +34,22 @@ impl fmt::Debug for StreamState {
 #[derive(Debug)]
 pub struct YewStream<OUT> {
     stream: ReadableStream,
+    active: Rc<RefCell<bool>>,
     state: Option<StreamState>,
     failed_once: bool,
     _marker: PhantomData<OUT>,
 }
 
-impl<OUT> TryFrom<ReadableStream> for YewStream<OUT> {
+impl<OUT> TryFrom<(ReadableStream, Rc<RefCell<bool>>)> for YewStream<OUT> {
     type Error = Error;
 
-    fn try_from(stream: ReadableStream) -> Result<Self, Error> {
+    fn try_from(input: (ReadableStream, Rc<RefCell<bool>>)) -> Result<Self, Error> {
+        let (stream, active) = input;
         let reader = stream.get_reader()
             .map_err(|e| anyhow!(e.to_string().as_string().unwrap()))?;
         Ok(Self {
             stream,
+            active,
             state: Some(StreamState::ReadyPoll(reader)),
             failed_once: false,
             _marker: PhantomData::default(),
@@ -53,16 +58,17 @@ impl<OUT> TryFrom<ReadableStream> for YewStream<OUT> {
 }
 
 /// From a JS ReadableStream
-impl<OUT> TryFrom<JsValue> for YewStream<OUT>
+impl<OUT> TryFrom<(JsValue, Rc<RefCell<bool>>)> for YewStream<OUT>
 {
     type Error = Error;
 
-    fn try_from(stream: JsValue) -> Result<Self, Error> {
+    fn try_from(input: (JsValue, Rc<RefCell<bool>>)) -> Result<Self, Error> {
+        let (stream, active) = input;
         let stream: ReadableStream = stream.dyn_into::<sys::ReadableStream>()
             .map_err(|_| anyhow!("Failed to cast JsValue into sys::ReadableStream"))?
             .into();
 
-        stream.try_into()
+        (stream, active).try_into()
     }
 }
 
@@ -70,8 +76,13 @@ impl<OUT: From<Binary> + Unpin> Stream for YewStream<OUT> {
     type Item = OUT;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let into_stream: &mut Option<StreamState> = &mut self.get_mut().state;
+        let inner = &mut self.get_mut();
+        let into_stream: &mut Option<StreamState> = &mut inner.state;
         loop {
+            if *inner.active.borrow() == false {
+               let err: Binary = Err(super::super::web_sys::FetchError::Canceled.into());
+               return Poll::Ready(Some(err.into()));
+            }
             match into_stream.take() {
                 Some(StreamState::ReadyPoll(stream)) => {
                     let future_value = stream.read();
@@ -95,6 +106,7 @@ impl<OUT: From<Binary> + Unpin> Stream for YewStream<OUT> {
                     return match future_value.as_mut().poll(cx) {
                         Poll::Ready(Ok(None)) => {
                             *into_stream = None;
+                            *inner.active.borrow_mut() = false;
                             Poll::Ready(None)
                         }
                         Poll::Ready(Ok(Some(data))) => {
