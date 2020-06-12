@@ -317,13 +317,9 @@ mod tests {
 #[cfg(feature="web_sys")]
 mod stream_tests {
     use super::*;
-    use crate::callback::{test_util::CallbackFuture, Callback};
-    use crate::format::{Json, Nothing};
-    use crate::utils;
-    use ::web_sys::ReferrerPolicy;
-    use serde::Deserialize;
+    use crate::callback::{test_util::{CallbackFuture, CallbackStreamFuture}, Callback};
+    use crate::format::Nothing;
     use ssri::Integrity;
-    use std::collections::HashMap;
     use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
     use futures::TryStreamExt;
 
@@ -366,6 +362,41 @@ mod stream_tests {
         let result = String::from_utf8(bytes.unwrap()).unwrap();
 
         assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(result, RESOURCE);
+    }
+
+    #[test]
+    async fn stream_consume_integrity() {
+    let request = Request::get(format!(
+            "https://httpbin.org/base64/{}",
+            base64::encode_config(RESOURCE, base64::URL_SAFE)
+        ))
+        .body(Nothing)
+        .unwrap();
+        
+        let options = FetchOptions {
+            integrity: Some(Integrity::from(RESOURCE).to_string()),
+            .. FetchOptions::default()
+        };
+
+        let cb_future = CallbackFuture::<Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>>::default();
+        let callback: Callback<_> = cb_future.clone().into();
+        let _task = FetchService::new().fetch_stream_with_options(request, options, callback);
+        let resp = cb_future.await;
+        let status = resp.status();
+
+
+        let cb_stream = CallbackStreamFuture::<Vec<u8>, _>::default();
+        let callback: Callback<_> = cb_stream.clone().into();
+        let stream = resp.into_body().unwrap();
+        stream.consume_with_callback(callback);
+
+        let maybe_bytes = cb_stream.await;
+        let bytes_result = maybe_bytes.unwrap();
+        let bytes = bytes_result.unwrap();
+        let result = String::from_utf8(bytes).unwrap();
+
+        assert_eq!(status, StatusCode::OK);
         assert_eq!(result, RESOURCE);
     }
 }

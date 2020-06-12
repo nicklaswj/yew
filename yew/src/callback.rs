@@ -111,7 +111,11 @@ impl<IN: 'static> Callback<IN> {
 
 #[cfg(test)]
 pub(crate) mod test_util {
+    #[cfg(feature = "web_sys")]
+    use anyhow::Error;
     use super::*;
+    #[cfg(feature = "web_sys")]
+    use crate::services::fetch::yew_stream::StreamChunk;
     use std::cell::RefCell;
     use std::future::Future;
     use std::pin::Pin;
@@ -175,4 +179,62 @@ pub(crate) mod test_util {
             }
         }
     }
+
+    cfg_if::cfg_if! { if #[cfg(feature = "web_sys")] {
+        #[derive(Clone, Default)]
+        pub(crate) struct CallbackStreamFuture<T, I> {
+            handle: Rc<RefCell<CallbackHandle<Result<T, Error>>>>,
+            finised: Rc<RefCell<bool>>,
+            _phantom: std::marker::PhantomData<I>,
+        }
+
+        impl<T, I> Into<Callback<StreamChunk<Result<T, Error>>>> for CallbackStreamFuture<T, I>
+            where
+                T: 'static + std::iter::Extend<I> + std::fmt::Debug + IntoIterator<Item = I>,
+                I: 'static + std::fmt::Debug,
+        {
+            fn into(self) -> Callback<StreamChunk<Result<T, Error>>> {
+                Callback::from(move |chunk: StreamChunk<Result<T, Error>>| {
+
+                    match chunk {
+                        StreamChunk::DataChunk(result) => {
+                            let output = &mut self.handle.borrow_mut().output;
+                            if let Ok(data) = result {
+                                if let Some(Ok(ref mut output)) = output {
+                                    output.extend(data.into_iter())
+                                } else if let None = output {
+                                    *output = Some(Ok(data))
+                                }
+                            } else {
+                                *output = Some(result);
+                            }
+                        },
+                        StreamChunk::Finished => self.finish(),
+                    }
+                })
+            }
+        }
+
+        impl<T, I> Future for CallbackStreamFuture<T, I> {
+            type Output = Option<Result<T, Error>>;
+
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                if *self.finised.borrow() {
+                    Poll::Ready(self.handle.borrow_mut().output.take())
+                } else {
+                    self.handle.borrow_mut().waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        }
+
+        impl<T, I> CallbackStreamFuture<T, I> {
+            fn finish(&self) {
+                if let Some(waker) = self.handle.borrow_mut().waker.take() {
+                    *self.finised.borrow_mut() = true;
+                    waker.wake();
+                }
+            }
+        }
+    }}
 }
