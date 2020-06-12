@@ -311,3 +311,61 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "wasm_test")]
+#[cfg(feature="web_sys")]
+mod stream_tests {
+    use super::*;
+    use crate::callback::{test_util::CallbackFuture, Callback};
+    use crate::format::{Json, Nothing};
+    use crate::utils;
+    use ::web_sys::ReferrerPolicy;
+    use serde::Deserialize;
+    use ssri::Integrity;
+    use std::collections::HashMap;
+    use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
+    use futures::TryStreamExt;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    static RESOURCE: &str = "\
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
+        Quisque tempus diam vitae libero faucibus, et malesuada nisi mollis. \
+        Phasellus laoreet id ante at ullamcorper. Cras sit amet tempor enim, et sodales ex. \
+        Phasellus euismod volutpat bibendum. \
+        In vel dictum tellus, a dictum urna. Sed semper ultrices ornare. \
+        Nam vulputate pretium turpis, at vehicula libero placerat in. \
+        Cras condimentum arcu nulla, et feugiat erat finibus non. \
+        Nunc laoreet massa et orci mattis aliquam. Nullam eu fringilla sapien. \
+        Proin fermentum orci in consectetur suscipit. In hac habitasse platea dictumst. \
+        Nam ac ante auctor, tempor sapien ornare, lobortis neque. \
+        Curabitur eget blandit nisi.";
+
+    #[test]
+    async fn stream_integrity() {
+        let request = Request::get(format!(
+            "https://httpbin.org/base64/{}",
+            base64::encode_config(RESOURCE, base64::URL_SAFE)
+        ))
+        .body(Nothing)
+        .unwrap();
+        
+        let options = FetchOptions {
+            integrity: Some(Integrity::from(RESOURCE).to_string()),
+            .. FetchOptions::default()
+        };
+
+        let cb_future = CallbackFuture::<Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>>::default();
+        let callback: Callback<_> = cb_future.clone().into();
+        let _task = FetchService::new().fetch_stream_with_options(request, options, callback);
+        let mut resp = cb_future.await;
+
+        let stream = resp.body_mut().as_mut().unwrap();
+        let bytes: Result<Vec<u8>, anyhow::Error> = stream.try_concat().await;
+        let result = String::from_utf8(bytes.unwrap()).unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(result, RESOURCE);
+    }
+}
