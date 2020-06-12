@@ -429,7 +429,7 @@ where
                 })?;
 
             YewStream::try_from((body, active2))
-                .map_err(|e| FetchError::Other(e))
+                .map_err(FetchError::Other)
                 .map(|stream| (stream, web_response))
         } else {
             Err::<(YewStream<OUT>, WebResponse), FetchError>(FetchError::Canceled)
