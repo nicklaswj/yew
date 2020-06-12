@@ -5,9 +5,9 @@ pub mod sys;
 /// Stream implementation of ReadableStreamDefaultReader
 pub mod yew_stream;
 
+use std::future::Future;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use std::future::Future;
 
 #[derive(Debug)]
 /// ReadableStream
@@ -55,8 +55,10 @@ impl ReadableStream {
     }
 
     /// Can be called either with or without a reason (just like the javascript version)
-    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Result<JsValue, JsValue>>, js_sys::Error> {
-
+    pub fn cancel(
+        &self,
+        reason: Option<&str>,
+    ) -> Result<impl Future<Output = Result<JsValue, JsValue>>, js_sys::Error> {
         let promise: JsFuture = if let Some(curr_reason) = reason {
             self.inner
                 .cancel_with_reason(JsValue::from(curr_reason))
@@ -98,31 +100,36 @@ impl ReadableStreamDefaultReader {
     }
 
     /// Can be called either with or without a reason (just like the javascript version)
-    pub fn cancel(&self, reason: Option<&str>) -> Result<impl Future<Output = Option<String>>, js_sys::Error> {
-
+    pub fn cancel(
+        &self,
+        reason: Option<&str>,
+    ) -> Result<impl Future<Output = Option<String>>, js_sys::Error> {
         let (promise, has_reason) = if let Some(curr_reason) = reason {
-            (self.inner
-                .cancel_with_reason(JsValue::from(curr_reason))
-                .map(JsFuture::from)
-                .map_err(js_sys::Error::from)?, true)
-
+            (
+                self.inner
+                    .cancel_with_reason(JsValue::from(curr_reason))
+                    .map(JsFuture::from)
+                    .map_err(js_sys::Error::from)?,
+                true,
+            )
         } else {
-            (self.inner
-                .cancel()
-                .map(JsFuture::from)
-                .map_err(js_sys::Error::from)?, false)
+            (
+                self.inner
+                    .cancel()
+                    .map(JsFuture::from)
+                    .map_err(js_sys::Error::from)?,
+                false,
+            )
         };
 
         Ok(async move {
             if has_reason {
-                promise.await
+                promise
+                    .await
                     .map(|value| Some(value.as_string().unwrap()))
                     .unwrap()
-            }
-            else {
-                promise.await
-                    .map(|_| None)
-                    .unwrap()
+            } else {
+                promise.await.map(|_| None).unwrap()
             }
         })
     }
@@ -131,18 +138,20 @@ impl ReadableStreamDefaultReader {
     pub fn closed(&self) -> impl Future<Output = Result<(), ()>> {
         let future: JsFuture = JsFuture::from(self.inner.closed());
         async {
-            let res:Result<(), ()> = future
-                .await
-                .map(|_| ())
-                .map_err(|_| ());
+            let res: Result<(), ()> = future.await.map(|_| ()).map_err(|_| ());
             res
         }
     }
-    
-    /// To read a value from the stream
-    pub fn read(&self) -> Result<impl Future<Output = Result<ReadableStreamDefaultReaderValue, js_sys::Error>>, js_sys::Error> {
 
-        let promise: JsFuture = self.inner
+    /// To read a value from the stream
+    pub fn read(
+        &self,
+    ) -> Result<
+        impl Future<Output = Result<ReadableStreamDefaultReaderValue, js_sys::Error>>,
+        js_sys::Error,
+    > {
+        let promise: JsFuture = self
+            .inner
             .read()
             .map(JsFuture::from)
             .map_err(js_sys::Error::from)?;
@@ -157,9 +166,7 @@ impl ReadableStreamDefaultReader {
 
     /// To release the lock on the reader
     pub fn release_lock(&self) -> Result<(), js_sys::Error> {
-        self.inner
-            .release_lock()
-            .map_err(js_sys::Error::from)
+        self.inner.release_lock().map_err(js_sys::Error::from)
     }
 }
 
@@ -182,8 +189,7 @@ impl ReadableStreamDefaultReaderValue {
 impl From<JsValue> for ReadableStreamDefaultReaderValue {
     fn from(value: JsValue) -> Self {
         Self {
-            inner: wasm_bindgen::JsCast::unchecked_from_js(value)
+            inner: wasm_bindgen::JsCast::unchecked_from_js(value),
         }
     }
 }
-

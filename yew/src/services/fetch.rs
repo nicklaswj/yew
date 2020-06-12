@@ -314,14 +314,17 @@ mod tests {
 
 #[cfg(test)]
 #[cfg(feature = "wasm_test")]
-#[cfg(feature="web_sys")]
+#[cfg(feature = "web_sys")]
 mod stream_tests {
     use super::*;
-    use crate::callback::{test_util::{CallbackFuture, CallbackStreamFuture}, Callback};
+    use crate::callback::{
+        test_util::{CallbackFuture, CallbackStreamFuture},
+        Callback,
+    };
     use crate::format::Nothing;
+    use futures::TryStreamExt;
     use ssri::Integrity;
     use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
-    use futures::TryStreamExt;
 
     wasm_bindgen_test_configure!(run_in_browser);
 
@@ -346,13 +349,15 @@ mod stream_tests {
         ))
         .body(Nothing)
         .unwrap();
-        
+
         let options = FetchOptions {
             integrity: Some(Integrity::from(RESOURCE).to_string()),
-            .. FetchOptions::default()
+            ..FetchOptions::default()
         };
 
-        let cb_future = CallbackFuture::<Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>>::default();
+        let cb_future = CallbackFuture::<
+            Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>,
+        >::default();
         let callback: Callback<_> = cb_future.clone().into();
         let _task = FetchService::new().fetch_stream_with_options(request, options, callback);
         let mut resp = cb_future.await;
@@ -367,24 +372,25 @@ mod stream_tests {
 
     #[test]
     async fn stream_consume_integrity() {
-    let request = Request::get(format!(
+        let request = Request::get(format!(
             "https://httpbin.org/base64/{}",
             base64::encode_config(RESOURCE, base64::URL_SAFE)
         ))
         .body(Nothing)
         .unwrap();
-        
+
         let options = FetchOptions {
             integrity: Some(Integrity::from(RESOURCE).to_string()),
-            .. FetchOptions::default()
+            ..FetchOptions::default()
         };
 
-        let cb_future = CallbackFuture::<Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>>::default();
+        let cb_future = CallbackFuture::<
+            Response<Result<YewStream<Result<Vec<u8>, anyhow::Error>>, anyhow::Error>>,
+        >::default();
         let callback: Callback<_> = cb_future.clone().into();
         let _task = FetchService::new().fetch_stream_with_options(request, options, callback);
         let resp = cb_future.await;
         let status = resp.status();
-
 
         let cb_stream = CallbackStreamFuture::<Vec<u8>, _>::default();
         let callback: Callback<_> = cb_stream.clone().into();

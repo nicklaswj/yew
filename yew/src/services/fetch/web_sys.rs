@@ -1,7 +1,7 @@
 //! `web-sys` implementation for the fetch service.
 
-use super::Referrer;
 pub use super::yew_stream::YewStream;
+use super::Referrer;
 use crate::callback::Callback;
 use crate::format::{Binary, Format, Text};
 use crate::services::Task;
@@ -412,8 +412,7 @@ where
     }
 
     // Start fetch
-    let fetch_future = 
-        GLOBAL.with(|global| global.fetch_with_request_and_init(&request, &init));
+    let fetch_future = GLOBAL.with(|global| global.fetch_with_request_and_init(&request, &init));
 
     // Spawn future to resolve fetch
     let active = Rc::new(RefCell::new(true));
@@ -421,41 +420,30 @@ where
     let active2 = active.clone();
     let format_future = async move {
         let active = active2.clone();
-        let web_response = Fetcher::get_response(
-            &active.borrow(),
-            fetch_future
-        ).await?;
-        
+        let web_response = Fetcher::get_response(&active.borrow(), fetch_future).await?;
+
         if *active.borrow() {
-            let body = js_sys::Reflect::get(&web_response, &JsValue::from("body"))
-                .map_err(|_| FetchError::FetchFailed("Failed to get body of response".to_owned()))?;
+            let body =
+                js_sys::Reflect::get(&web_response, &JsValue::from("body")).map_err(|_| {
+                    FetchError::FetchFailed("Failed to get body of response".to_owned())
+                })?;
 
             YewStream::try_from((body, active2))
                 .map_err(|e| FetchError::Other(e))
-                .map(|stream| (
-                    stream,
-                    web_response
-                ))
+                .map(|stream| (stream, web_response))
         } else {
-            Err::<(YewStream<OUT>, WebResponse), FetchError>
-                (FetchError::Canceled)
+            Err::<(YewStream<OUT>, WebResponse), FetchError>(FetchError::Canceled)
         }
     };
 
     let stream_future = async move {
-        let result = format_future.await
-                        .map_err(Error::from);
+        let result = format_future.await.map_err(Error::from);
         let (stream, status, headers) = match result {
             Ok((stream, response)) => (Ok(stream), response.status(), Some(response.headers())),
             Err(err) => (Err(err), 408, None),
         };
-        
-        Fetcher::callback(
-            &callback,
-            stream,
-            status,
-            headers
-        );
+
+        Fetcher::callback(&callback, stream, status, headers);
     };
 
     spawn_local(stream_future);
@@ -464,7 +452,6 @@ where
         active,
         abort_controller,
     }))
-
 }
 
 fn fetch_impl<IN, OUT: 'static, DATA: 'static>(
@@ -477,7 +464,6 @@ where
     DATA: JsInterop,
     IN: Into<Format<DATA>>,
     OUT: From<Format<DATA>>,
-
 {
     // Transform http::Request into WebRequest.
     let (parts, body) = request.into_parts();
@@ -511,7 +497,10 @@ where
 struct Fetcher {}
 
 impl Fetcher {
-    async fn get_response(active: &bool, fetch_promise: Promise) -> Result<WebResponse, FetchError> {
+    async fn get_response(
+        active: &bool,
+        fetch_promise: Promise,
+    ) -> Result<WebResponse, FetchError> {
         let response = JsFuture::from(fetch_promise)
             .await
             .map_err(|err| err.unchecked_into::<js_sys::Error>())
@@ -526,9 +515,12 @@ impl Fetcher {
     // Prepare the response callback.
     // Notice that the callback signature must match the call from the javascript
     // side. There is no static check at this point.
-    fn callback<OUT>(callback: &Callback<Response<OUT>>,
-        out: OUT, status: u16, headers: Option<Headers>)
-    {
+    fn callback<OUT>(
+        callback: &Callback<Response<OUT>>,
+        out: OUT,
+        status: u16,
+        headers: Option<Headers>,
+    ) {
         let mut response_builder = Response::builder();
         if let Ok(status) = StatusCode::from_u16(status) {
             response_builder = response_builder.status(status);
@@ -594,12 +586,7 @@ where
         let out = OUT::from(data);
 
         *self.active.borrow_mut() = false;
-        Fetcher::callback(
-            &self.callback,
-            out,
-            status,
-            headers
-        );
+        Fetcher::callback(&self.callback, out, status, headers);
     }
 
     async fn get_data(&self, response: &WebResponse) -> Result<DATA, FetchError> {

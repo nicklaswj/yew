@@ -111,11 +111,11 @@ impl<IN: 'static> Callback<IN> {
 
 #[cfg(test)]
 pub(crate) mod test_util {
-    #[cfg(feature = "web_sys")]
-    use anyhow::Error;
     use super::*;
     #[cfg(feature = "web_sys")]
     use crate::services::fetch::yew_stream::StreamChunk;
+    #[cfg(feature = "web_sys")]
+    use anyhow::Error;
     use std::cell::RefCell;
     use std::future::Future;
     use std::pin::Pin;
