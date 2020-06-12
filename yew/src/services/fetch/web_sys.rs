@@ -1,13 +1,13 @@
 //! `web-sys` implementation for the fetch service.
 
 use super::Referrer;
-use super::yew_stream::YewStream;
+pub use super::yew_stream::YewStream;
 use crate::callback::Callback;
 use crate::format::{Binary, Format, Text};
 use crate::services::Task;
 use anyhow::{anyhow, Error};
 use http::request::Parts;
-use js_sys::{Array, Object, Promise, Uint8Array};
+use js_sys::{Array, Promise, Uint8Array};
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt;
@@ -142,6 +142,8 @@ enum FetchError {
     InvalidResponse,
     #[error("unexpected error, please report")]
     InternalError,
+    #[error(transparent)]
+    Other(#[from] Error),
 }
 
 #[derive(Debug)]
@@ -425,13 +427,11 @@ where
         ).await?;
         
         if *active.borrow() {
-            let body = Object::get_own_property_descriptor(
-                &web_response,
-                &JsValue::from("body"),
-            );
+            let body = js_sys::Reflect::get(&web_response, &JsValue::from("body"))
+                .map_err(|_| FetchError::FetchFailed("Failed to get body of response".to_owned()))?;
 
             YewStream::try_from(body)
-                .map_err(|_| FetchError::InternalError)
+                .map_err(|e| FetchError::Other(e))
                 .map(|stream| (
                     stream,
                     web_response
